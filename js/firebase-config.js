@@ -2,15 +2,14 @@
 // يجب استبدال هذه القيم بإعدادات مشروعك الفعلي
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBP0K7wbggjiqcDvLXyqTgfu4-P_V30vcw",
-  authDomain: "tabro3at-bc47f.firebaseapp.com",
-  projectId: "tabro3at-bc47f",
-  storageBucket: "tabro3at-bc47f.firebasestorage.app",
-  messagingSenderId: "280758361659",
-  appId: "1:280758361659:web:763e73d3529038b020861e",
-  measurementId: "G-5XZWJPYF3Q"
+  apiKey: "AIzaSyCKkG11JFHcvA4dt8iPvUC6Wr__IK9ddRQ",
+  authDomain: "tabaro3-5d40d.firebaseapp.com",
+  projectId: "tabaro3-5d40d",
+  storageBucket: "tabaro3-5d40d.firebasestorage.app",
+  messagingSenderId: "636315752276",
+  appId: "1:636315752276:web:4c874c792754bd2a66dac1",
+  measurementId: "G-VVHJBDWKFS"
 };
-
 
 // تهيئة Firebase
 firebase.initializeApp(firebaseConfig);
