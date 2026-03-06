@@ -5,12 +5,13 @@ import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.2/firebas
 //  ضع إعدادات Firebase الخاصة بك هنا
 // ======================================
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyCKkG11JFHcvA4dt8iPvUC6Wr__IK9ddRQ",
+  authDomain: "tabaro3-5d40d.firebaseapp.com",
+  projectId: "tabaro3-5d40d",
+  storageBucket: "tabaro3-5d40d.firebasestorage.app",
+  messagingSenderId: "636315752276",
+  appId: "1:636315752276:web:4c874c792754bd2a66dac1",
+  measurementId: "G-VVHJBDWKFS"
 };
 
 const app = initializeApp(firebaseConfig);
