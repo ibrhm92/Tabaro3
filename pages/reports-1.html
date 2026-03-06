@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>التقارير – نظام التبرعات</title>
+<link rel="stylesheet" href="../css/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+</head>
+<body>
+
+<nav>
+  <span class="logo">🤲 نظام التبرعات</span>
+  <a href="../index.html">الرئيسية</a>
+  <a href="donors.html">المتبرعون</a>
+  <a href="income.html">الوارد</a>
+  <a href="expenses.html">المنصرف</a>
+  <a href="reports.html" class="active">التقارير</a>
+</nav>
+
+<div class="page">
+  <h1 class="page-title">التقارير والإحصائيات</h1>
+
+  <!-- فلتر سنة -->
+  <div class="card" style="display:flex; gap:16px; align-items:flex-end; flex-wrap:wrap;">
+    <div class="form-group">
+      <label>السنة</label>
+      <select id="filterYear"></select>
+    </div>
+    <button class="btn btn-primary" onclick="loadAll()">📊 عرض</button>
+    <button class="btn btn-success" onclick="window.print()">🖨️ طباعة</button>
+  </div>
+
+  <!-- إجماليات -->
+  <div class="stats-grid" id="statsGrid">
+    <div class="stat-box green"><div class="val" id="sIn">—</div><div class="lbl">💰 إجمالي الوارد (ج.م)</div></div>
+    <div class="stat-box red"><div class="val" id="sOut">—</div><div class="lbl">💸 إجمالي المنصرف (ج.م)</div></div>
+    <div class="stat-box blue"><div class="val" id="sBal">—</div><div class="lbl">🏦 الرصيد (ج.م)</div></div>
+    <div class="stat-box gold"><div class="val" id="sDonors">—</div><div class="lbl">👥 عدد المتبرعين</div></div>
+  </div>
+
+  <!-- شارت شهري -->
+  <div class="card">
+    <div class="card-title">📈 الوارد والمنصرف شهرياً</div>
+    <canvas id="chartMonthly" height="120"></canvas>
+  </div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+    <!-- طرق التبرع -->
+    <div class="card">
+      <div class="card-title">🥧 توزيع طرق التبرع</div>
+      <canvas id="chartMethods" height="240"></canvas>
+    </div>
+    <!-- أعلى متبرعين -->
+    <div class="card">
+      <div class="card-title">🏆 أعلى 10 متبرعين</div>
+      <canvas id="chartTopDonors" height="240"></canvas>
+    </div>
+  </div>
+
+  <!-- جدول شهري -->
+  <div class="card" style="margin-top:20px;">
+    <div class="card-title">📅 ملخص شهري</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>الشهر</th>
+            <th>الوارد (ج.م)</th>
+            <th>المنصرف (ج.م)</th>
+            <th>الرصيد (ج.م)</th>
+          </tr>
+        </thead>
+        <tbody id="monthlyTbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- جدول أعلى متبرعين -->
+  <div class="card">
+    <div class="card-title">👥 تفاصيل المتبرعين</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>الاسم</th>
+            <th>إجمالي التبرعات (ج.م)</th>
+            <th>عدد مرات التبرع</th>
+            <th>طريقة التبرع الأساسية</th>
+          </tr>
+        </thead>
+        <tbody id="donorStatsTbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script type="module">
+import { db } from "../js/firebase.js";
+import { collection, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const fmt = n => Number(n||0).toLocaleString('ar-EG');
+let chartMonthly, chartMethods, chartTopDonors;
+
+const MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+const methodLabel = m => ({ cash:'كاش', vodafone:'فودافون كاش', instapay:'انستاباي', bank:'تحويل بنكي' })[m] || m;
+
+// ملء سنوات
+const yearSel = document.getElementById('filterYear');
+const curYear = new Date().getFullYear();
+for (let y = curYear; y >= curYear-4; y--) {
+  const o = document.createElement('option');
+  o.value = y; o.textContent = y;
+  yearSel.appendChild(o);
+}
+
+window.loadAll = async function() {
+  const year = yearSel.value;
+
+  const [incomeSnap, expSnap, donorsSnap] = await Promise.all([
+    getDocs(collection(db,'income')),
+    getDocs(collection(db,'expenses')),
+    getDocs(collection(db,'donors'))
+  ]);
+
+  const incomeRows = incomeSnap.docs.map(d => d.data()).filter(r => (r.date||'').startsWith(year));
+  const expRows    = expSnap.docs.map(d => d.data()).filter(r => (r.date||'').startsWith(year));
+
+  const totalIn  = incomeRows.reduce((s,r) => s+Number(r.amount||0), 0);
+  const totalOut = expRows.reduce((s,r) => s+Number(r.amount||0), 0);
+
+  document.getElementById('sIn').textContent     = fmt(totalIn);
+  document.getElementById('sOut').textContent    = fmt(totalOut);
+  document.getElementById('sBal').textContent    = fmt(totalIn-totalOut);
+  document.getElementById('sDonors').textContent = donorsSnap.size;
+
+  // بيانات شهرية
+  const monthIn  = Array(12).fill(0);
+  const monthOut = Array(12).fill(0);
+  incomeRows.forEach(r => { const m = parseInt((r.date||'').split('-')[1])-1; if(m>=0) monthIn[m]  += Number(r.amount||0); });
+  expRows.forEach(r    => { const m = parseInt((r.date||'').split('-')[1])-1; if(m>=0) monthOut[m] += Number(r.amount||0); });
+
+  // شارت شهري
+  if (chartMonthly) chartMonthly.destroy();
+  chartMonthly = new Chart(document.getElementById('chartMonthly'), {
+    type: 'bar',
+    data: {
+      labels: MONTHS,
+      datasets: [
+        { label: 'الوارد',    data: monthIn,  backgroundColor: '#1a6e3c', borderRadius: 6 },
+        { label: 'المنصرف',  data: monthOut, backgroundColor: '#e74c3c', borderRadius: 6 }
+      ]
+    },
+    options: { plugins: { legend: { position:'top' } }, scales: { y: { beginAtZero: true } } }
+  });
+
+  // جدول شهري
+  const tbody = document.getElementById('monthlyTbody');
+  let cumulBal = 0;
+  tbody.innerHTML = MONTHS.map((m, i) => {
+    const bal = monthIn[i] - monthOut[i];
+    cumulBal += bal;
+    return `<tr>
+      <td>${m}</td>
+      <td class="badge-in" style="color:#166534;">${fmt(monthIn[i])}</td>
+      <td style="color:#991b1b;">${fmt(monthOut[i])}</td>
+      <td><strong style="color:${cumulBal>=0?'#166534':'#991b1b'}">${fmt(cumulBal)}</strong></td>
+    </tr>`;
+  }).join('');
+
+  // طرق التبرع
+  const methodTotals = { cash:0, vodafone:0, instapay:0, bank:0 };
+  incomeRows.forEach(r => { if(methodTotals[r.method]!==undefined) methodTotals[r.method] += Number(r.amount||0); });
+
+  if (chartMethods) chartMethods.destroy();
+  chartMethods = new Chart(document.getElementById('chartMethods'), {
+    type: 'doughnut',
+    data: {
+      labels: ['كاش','فودافون كاش','انستاباي','تحويل بنكي'],
+      datasets: [{ data: Object.values(methodTotals), backgroundColor: ['#b7950b','#e74c3c','#7d3c98','#2471a3'] }]
+    },
+    options: { plugins: { legend: { position:'bottom' } } }
+  });
+
+  // أعلى متبرعين
+  const donorMap = {};
+  incomeRows.forEach(r => {
+    if (!r.donorName) return;
+    if (!donorMap[r.donorName]) donorMap[r.donorName] = { total:0, count:0, methods:{} };
+    donorMap[r.donorName].total += Number(r.amount||0);
+    donorMap[r.donorName].count++;
+    donorMap[r.donorName].methods[r.method] = (donorMap[r.donorName].methods[r.method]||0) + 1;
+  });
+
+  const sorted = Object.entries(donorMap).sort((a,b) => b[1].total - a[1].total).slice(0,10);
+
+  if (chartTopDonors) chartTopDonors.destroy();
+  chartTopDonors = new Chart(document.getElementById('chartTopDonors'), {
+    type: 'bar',
+    indexAxis: 'y',
+    data: {
+      labels: sorted.map(([name]) => name),
+      datasets: [{ data: sorted.map(([,v]) => v.total), backgroundColor: '#1a6e3c', borderRadius: 5 }]
+    },
+    options: { plugins: { legend: { display:false } }, scales: { x: { beginAtZero:true } } }
+  });
+
+  // جدول المتبرعين
+  const dtbody = document.getElementById('donorStatsTbody');
+  if (!sorted.length) { dtbody.innerHTML = '<tr><td colspan="5" class="empty">لا توجد بيانات</td></tr>'; return; }
+  dtbody.innerHTML = sorted.map(([name, v], i) => {
+    const topMethod = Object.entries(v.methods).sort((a,b)=>b[1]-a[1])[0]?.[0] || '';
+    return `<tr>
+      <td>${i+1}</td>
+      <td><strong>${name}</strong></td>
+      <td>${fmt(v.total)} ج.م</td>
+      <td>${v.count}</td>
+      <td>${methodLabel(topMethod)}</td>
+    </tr>`;
+  }).join('');
+}
+
+loadAll();
+</script>
+</body>
+</html>

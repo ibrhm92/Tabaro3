@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>المنصرف – نظام التبرعات</title>
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+<nav>
+  <span class="logo">🤲 نظام التبرعات</span>
+  <a href="../index.html">الرئيسية</a>
+  <a href="donors.html">المتبرعون</a>
+  <a href="income.html">الوارد</a>
+  <a href="expenses.html" class="active">المنصرف</a>
+  <a href="reports.html">التقارير</a>
+</nav>
+
+<div class="page">
+  <h1 class="page-title">سجل المنصرف</h1>
+
+  <!-- فورم إضافة -->
+  <div class="card">
+    <div class="card-title">➕ تسجيل مصروف جديد</div>
+    <div id="alertExp"></div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>وجهة الصرف *</label>
+        <input type="text" id="fDest" placeholder="مثال: مساعدة أسرة / مستشفى ...">
+      </div>
+      <div class="form-group">
+        <label>المبلغ (ج.م) *</label>
+        <input type="number" id="fAmount" placeholder="0" min="0">
+      </div>
+      <div class="form-group">
+        <label>نوع المصروف</label>
+        <select id="fCategory">
+          <option value="">اختر...</option>
+          <option value="family">مساعدة أسرة</option>
+          <option value="medical">مساعدة طبية</option>
+          <option value="education">تعليم</option>
+          <option value="food">غذاء</option>
+          <option value="other">أخرى</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>التاريخ *</label>
+        <input type="date" id="fDate">
+      </div>
+      <div class="form-group" style="grid-column:1/-1;">
+        <label>ملاحظات</label>
+        <input type="text" id="fNotes" placeholder="أي تفاصيل إضافية...">
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-danger" onclick="saveExpense()">💾 تسجيل</button>
+    </div>
+  </div>
+
+  <!-- فلتر -->
+  <div class="card">
+    <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+      <div class="form-group">
+        <label>فلتر بالشهر</label>
+        <input type="month" id="filterMonth">
+      </div>
+      <div class="form-group">
+        <label>نوع المصروف</label>
+        <select id="filterCat">
+          <option value="">الكل</option>
+          <option value="family">مساعدة أسرة</option>
+          <option value="medical">مساعدة طبية</option>
+          <option value="education">تعليم</option>
+          <option value="food">غذاء</option>
+          <option value="other">أخرى</option>
+        </select>
+      </div>
+      <button class="btn btn-info" onclick="applyFilter()">🔍 تصفية</button>
+      <button class="btn" style="background:#eee;color:#333;" onclick="clearFilter()">مسح</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="margin-bottom:12px;">
+      <strong id="totalLabel">الإجمالي: 0 ج.م</strong>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>وجهة الصرف</th>
+            <th>المبلغ</th>
+            <th>النوع</th>
+            <th>التاريخ</th>
+            <th>ملاحظات</th>
+            <th>حذف</th>
+          </tr>
+        </thead>
+        <tbody id="expTbody">
+          <tr><td colspan="7" class="empty">جاري التحميل...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { db } from "../js/firebase.js";
+import {
+  collection, addDoc, getDocs, doc, deleteDoc, query, orderBy
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+let allRows = [];
+
+const catLabel = c => ({ family:'مساعدة أسرة', medical:'مساعدة طبية', education:'تعليم', food:'غذاء', other:'أخرى' })[c] || c || '—';
+const fmt = n => Number(n||0).toLocaleString('ar-EG');
+
+document.getElementById('fDate').valueAsDate = new Date();
+
+async function loadExpenses() {
+  const snap = await getDocs(query(collection(db,'expenses'), orderBy('date','desc')));
+  allRows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderTable(allRows);
+}
+
+function renderTable(rows) {
+  const total = rows.reduce((s, r) => s + Number(r.amount||0), 0);
+  document.getElementById('totalLabel').textContent = `الإجمالي: ${fmt(total)} ج.م`;
+
+  const tbody = document.getElementById('expTbody');
+  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="7" class="empty">لا توجد سجلات</td></tr>'; return; }
+
+  tbody.innerHTML = rows.map((r, i) => `
+    <tr>
+      <td>${i+1}</td>
+      <td><strong>${r.destination || '—'}</strong></td>
+      <td><strong>${fmt(r.amount)}</strong> ج.م</td>
+      <td><span class="badge badge-out">${catLabel(r.category)}</span></td>
+      <td>${r.date || '—'}</td>
+      <td>${r.notes || '—'}</td>
+      <td><button class="btn btn-danger btn-sm" onclick="window.deleteExp('${r.id}')">🗑️</button></td>
+    </tr>`).join('');
+}
+
+window.saveExpense = async function() {
+  const destination = document.getElementById('fDest').value.trim();
+  const amount      = document.getElementById('fAmount').value;
+  const date        = document.getElementById('fDate').value;
+
+  if (!destination || !amount || !date) {
+    document.getElementById('alertExp').innerHTML = '<div class="alert alert-error">يرجى ملء الحقول المطلوبة</div>';
+    return;
+  }
+
+  try {
+    await addDoc(collection(db,'expenses'), {
+      destination, amount: Number(amount),
+      category: document.getElementById('fCategory').value,
+      date,
+      notes: document.getElementById('fNotes').value.trim(),
+      createdAt: new Date().toISOString()
+    });
+    document.getElementById('alertExp').innerHTML = '<div class="alert alert-success">✅ تم التسجيل بنجاح</div>';
+    ['fDest','fAmount','fCategory','fNotes'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('fDate').valueAsDate = new Date();
+    setTimeout(() => document.getElementById('alertExp').innerHTML = '', 2500);
+    loadExpenses();
+  } catch(e) {
+    document.getElementById('alertExp').innerHTML = `<div class="alert alert-error">خطأ: ${e.message}</div>`;
+  }
+}
+
+window.deleteExp = async function(id) {
+  if (!confirm('هتحذف هذا السجل؟')) return;
+  await deleteDoc(doc(db,'expenses',id));
+  loadExpenses();
+}
+
+window.applyFilter = function() {
+  const month = document.getElementById('filterMonth').value;
+  const cat   = document.getElementById('filterCat').value;
+  let rows = [...allRows];
+  if (month) rows = rows.filter(r => (r.date||'').startsWith(month));
+  if (cat)   rows = rows.filter(r => r.category === cat);
+  renderTable(rows);
+}
+
+window.clearFilter = function() {
+  document.getElementById('filterMonth').value = '';
+  document.getElementById('filterCat').value   = '';
+  renderTable(allRows);
+}
+
+loadExpenses().catch(console.error);
+</script>
+</body>
+</html>

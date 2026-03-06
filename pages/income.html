@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>الوارد – نظام التبرعات</title>
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+<nav>
+  <span class="logo">🤲 نظام التبرعات</span>
+  <a href="../index.html">الرئيسية</a>
+  <a href="donors.html">المتبرعون</a>
+  <a href="income.html" class="active">الوارد</a>
+  <a href="expenses.html">المنصرف</a>
+  <a href="reports.html">التقارير</a>
+</nav>
+
+<div class="page">
+  <h1 class="page-title">سجل الوارد</h1>
+
+  <!-- فورم إضافة -->
+  <div class="card">
+    <div class="card-title">➕ تسجيل تبرع جديد</div>
+    <div id="alertIncome"></div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>اسم المتبرع *</label>
+        <input type="text" id="fDonorName" placeholder="اكتب الاسم أو اختر من القائمة" list="donorsList">
+        <datalist id="donorsList"></datalist>
+      </div>
+      <div class="form-group">
+        <label>المبلغ (ج.م) *</label>
+        <input type="number" id="fAmount" placeholder="0" min="0">
+      </div>
+      <div class="form-group">
+        <label>طريقة التبرع *</label>
+        <select id="fMethod">
+          <option value="">اختر...</option>
+          <option value="cash">كاش</option>
+          <option value="vodafone">فودافون كاش</option>
+          <option value="instapay">انستاباي</option>
+          <option value="bank">تحويل بنكي</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>التاريخ *</label>
+        <input type="date" id="fDate">
+      </div>
+      <div class="form-group" style="grid-column:1/-1;">
+        <label>ملاحظات</label>
+        <input type="text" id="fNotes" placeholder="أي ملاحظات...">
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-success" onclick="saveIncome()">💾 تسجيل</button>
+    </div>
+  </div>
+
+  <!-- فلتر -->
+  <div class="card">
+    <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+      <div class="form-group">
+        <label>فلتر بالشهر</label>
+        <input type="month" id="filterMonth">
+      </div>
+      <div class="form-group">
+        <label>طريقة التبرع</label>
+        <select id="filterMethod">
+          <option value="">الكل</option>
+          <option value="cash">كاش</option>
+          <option value="vodafone">فودافون كاش</option>
+          <option value="instapay">انستاباي</option>
+          <option value="bank">تحويل بنكي</option>
+        </select>
+      </div>
+      <button class="btn btn-info" onclick="applyFilter()">🔍 تصفية</button>
+      <button class="btn" style="background:#eee;color:#333;" onclick="clearFilter()">مسح</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+      <strong id="totalLabel">الإجمالي: 0 ج.م</strong>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>المتبرع</th>
+            <th>المبلغ</th>
+            <th>طريقة التبرع</th>
+            <th>التاريخ</th>
+            <th>ملاحظات</th>
+            <th>حذف</th>
+          </tr>
+        </thead>
+        <tbody id="incomeTbody">
+          <tr><td colspan="7" class="empty">جاري التحميل...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { db } from "../js/firebase.js";
+import {
+  collection, addDoc, getDocs, doc, deleteDoc, query, orderBy
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+let allRows = [];
+
+const methodLabel = m => ({ cash:'كاش', vodafone:'فودافون كاش', instapay:'انستاباي', bank:'تحويل بنكي' })[m] || m;
+const methodBadge = m => ({ cash:'badge-cash', vodafone:'badge-voda', instapay:'badge-insta', bank:'badge-bank' })[m] || '';
+const fmt = n => Number(n||0).toLocaleString('ar-EG');
+
+// تعيين اليوم الحالي
+document.getElementById('fDate').valueAsDate = new Date();
+
+async function loadIncome() {
+  const snap = await getDocs(query(collection(db,'income'), orderBy('date','desc')));
+  allRows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderTable(allRows);
+  loadDonorNames();
+}
+
+async function loadDonorNames() {
+  const snap = await getDocs(collection(db,'donors'));
+  const dl = document.getElementById('donorsList');
+  dl.innerHTML = snap.docs.map(d => `<option value="${d.data().name}">`).join('');
+}
+
+function renderTable(rows) {
+  const total = rows.reduce((s, r) => s + Number(r.amount||0), 0);
+  document.getElementById('totalLabel').textContent = `الإجمالي: ${fmt(total)} ج.م`;
+
+  const tbody = document.getElementById('incomeTbody');
+  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="7" class="empty">لا توجد سجلات</td></tr>'; return; }
+
+  tbody.innerHTML = rows.map((r, i) => `
+    <tr>
+      <td>${i+1}</td>
+      <td>${r.donorName || '—'}</td>
+      <td><strong>${fmt(r.amount)}</strong> ج.م</td>
+      <td><span class="badge ${methodBadge(r.method)}">${methodLabel(r.method)}</span></td>
+      <td>${r.date || '—'}</td>
+      <td>${r.notes || '—'}</td>
+      <td><button class="btn btn-danger btn-sm" onclick="window.deleteIncome('${r.id}')">🗑️</button></td>
+    </tr>`).join('');
+}
+
+window.saveIncome = async function() {
+  const donorName = document.getElementById('fDonorName').value.trim();
+  const amount    = document.getElementById('fAmount').value;
+  const method    = document.getElementById('fMethod').value;
+  const date      = document.getElementById('fDate').value;
+
+  if (!donorName || !amount || !method || !date) {
+    document.getElementById('alertIncome').innerHTML = '<div class="alert alert-error">يرجى ملء الحقول المطلوبة</div>';
+    return;
+  }
+
+  try {
+    await addDoc(collection(db,'income'), {
+      donorName, amount: Number(amount), method, date,
+      notes: document.getElementById('fNotes').value.trim(),
+      createdAt: new Date().toISOString()
+    });
+    document.getElementById('alertIncome').innerHTML = '<div class="alert alert-success">✅ تم التسجيل بنجاح</div>';
+    ['fDonorName','fAmount','fMethod','fNotes'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('fDate').valueAsDate = new Date();
+    setTimeout(() => document.getElementById('alertIncome').innerHTML = '', 2500);
+    loadIncome();
+  } catch(e) {
+    document.getElementById('alertIncome').innerHTML = `<div class="alert alert-error">خطأ: ${e.message}</div>`;
+  }
+}
+
+window.deleteIncome = async function(id) {
+  if (!confirm('هتحذف هذا السجل؟')) return;
+  await deleteDoc(doc(db,'income',id));
+  loadIncome();
+}
+
+window.applyFilter = function() {
+  const month  = document.getElementById('filterMonth').value;
+  const method = document.getElementById('filterMethod').value;
+  let rows = [...allRows];
+  if (month)  rows = rows.filter(r => (r.date||'').startsWith(month));
+  if (method) rows = rows.filter(r => r.method === method);
+  renderTable(rows);
+}
+
+window.clearFilter = function() {
+  document.getElementById('filterMonth').value  = '';
+  document.getElementById('filterMethod').value = '';
+  renderTable(allRows);
+}
+
+loadIncome().catch(console.error);
+</script>
+</body>
+</html>

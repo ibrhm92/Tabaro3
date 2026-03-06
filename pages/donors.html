@@ -1,1 +1,225 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>المتبرعون – نظام التبرعات</title>
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
 
+<nav>
+  <span class="logo">🤲 نظام التبرعات</span>
+  <a href="../index.html">الرئيسية</a>
+  <a href="donors.html" class="active">المتبرعون</a>
+  <a href="income.html">الوارد</a>
+  <a href="expenses.html">المنصرف</a>
+  <a href="reports.html">التقارير</a>
+</nav>
+
+<div class="page">
+  <h1 class="page-title">المتبرعون</h1>
+
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+      <input type="text" id="searchInput" placeholder="🔍 بحث باسم أو رقم هاتف..." style="width:260px;">
+      <button class="btn btn-primary" onclick="openModal()">+ إضافة متبرع</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>الاسم</th>
+            <th>رقم الواتساب</th>
+            <th>طريقة التبرع</th>
+            <th>المبلغ الشهري</th>
+            <th>تاريخ البدء</th>
+            <th>ملاحظات</th>
+            <th>إجراءات</th>
+          </tr>
+        </thead>
+        <tbody id="donorsTbody">
+          <tr><td colspan="8" class="empty">جاري التحميل...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Modal إضافة / تعديل -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modalTitle">إضافة متبرع</h2>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div id="alertBox"></div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>الاسم *</label>
+        <input type="text" id="fName" placeholder="اسم المتبرع">
+      </div>
+      <div class="form-group">
+        <label>رقم الواتساب (مصري)</label>
+        <input type="tel" id="fPhone" placeholder="01xxxxxxxxx" maxlength="11">
+      </div>
+      <div class="form-group">
+        <label>طريقة التبرع *</label>
+        <select id="fMethod">
+          <option value="">اختر...</option>
+          <option value="cash">كاش</option>
+          <option value="vodafone">فودافون كاش</option>
+          <option value="instapay">انستاباي</option>
+          <option value="bank">تحويل بنكي</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>المبلغ الشهري (ج.م)</label>
+        <input type="number" id="fAmount" placeholder="0" min="0">
+      </div>
+      <div class="form-group">
+        <label>تاريخ البدء</label>
+        <input type="date" id="fStartDate">
+      </div>
+      <div class="form-group" style="grid-column: 1/-1;">
+        <label>ملاحظات</label>
+        <textarea id="fNotes" rows="2" placeholder="أي ملاحظات إضافية..."></textarea>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" onclick="saveDonor()">💾 حفظ</button>
+      <button class="btn" style="background:#eee;color:#333;" onclick="closeModal()">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { db } from "../js/firebase.js";
+import {
+  collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+let donors = [];
+let editId = null;
+
+const methodLabel = m => ({ cash:'كاش', vodafone:'فودافون كاش', instapay:'انستاباي', bank:'تحويل بنكي' })[m] || m;
+const methodBadge = m => ({ cash:'badge-cash', vodafone:'badge-voda', instapay:'badge-insta', bank:'badge-bank' })[m] || '';
+const fmt = n => Number(n||0).toLocaleString('ar-EG');
+
+async function loadDonors() {
+  const snap = await getDocs(query(collection(db,'donors'), orderBy('name')));
+  donors = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderTable(donors);
+}
+
+function renderTable(list) {
+  const tbody = document.getElementById('donorsTbody');
+  if (!list.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty">لا يوجد متبرعون</td></tr>'; return; }
+  tbody.innerHTML = list.map((d, i) => `
+    <tr>
+      <td>${i+1}</td>
+      <td><strong>${d.name}</strong></td>
+      <td>
+        ${d.phone
+          ? `<a href="https://wa.me/2${d.phone}" target="_blank" class="btn btn-wa btn-sm">📱 ${d.phone}</a>`
+          : '—'}
+      </td>
+      <td><span class="badge ${methodBadge(d.method)}">${methodLabel(d.method)}</span></td>
+      <td>${d.monthlyAmount ? fmt(d.monthlyAmount)+' ج.م' : '—'}</td>
+      <td>${d.startDate || '—'}</td>
+      <td>${d.notes || '—'}</td>
+      <td style="display:flex;gap:6px;">
+        <button class="btn btn-info btn-sm" onclick="window.editDonor('${d.id}')">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="window.deleteDonor('${d.id}','${d.name}')">🗑️</button>
+        ${d.phone ? `<button class="btn btn-wa btn-sm" onclick="window.sendReminder('${d.phone}','${d.name}','${d.monthlyAmount||''}')">واتساب</button>` : ''}
+      </td>
+    </tr>`).join('');
+}
+
+window.openModal = function(id=null) {
+  editId = id;
+  document.getElementById('alertBox').innerHTML = '';
+  if (id) {
+    const d = donors.find(x => x.id===id);
+    document.getElementById('modalTitle').textContent = 'تعديل بيانات متبرع';
+    document.getElementById('fName').value        = d.name || '';
+    document.getElementById('fPhone').value       = d.phone || '';
+    document.getElementById('fMethod').value      = d.method || '';
+    document.getElementById('fAmount').value      = d.monthlyAmount || '';
+    document.getElementById('fStartDate').value   = d.startDate || '';
+    document.getElementById('fNotes').value       = d.notes || '';
+  } else {
+    document.getElementById('modalTitle').textContent = 'إضافة متبرع';
+    ['fName','fPhone','fMethod','fAmount','fStartDate','fNotes'].forEach(id => document.getElementById(id).value = '');
+  }
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+window.closeModal = function() {
+  document.getElementById('modalOverlay').classList.remove('open');
+  editId = null;
+}
+
+window.saveDonor = async function() {
+  const name  = document.getElementById('fName').value.trim();
+  const phone = document.getElementById('fPhone').value.trim();
+  const method = document.getElementById('fMethod').value;
+
+  if (!name || !method) {
+    document.getElementById('alertBox').innerHTML = '<div class="alert alert-error">الاسم وطريقة التبرع مطلوبين</div>';
+    return;
+  }
+
+  // التحقق من رقم مصري صحيح
+  if (phone && !/^01[0-9]{9}$/.test(phone)) {
+    document.getElementById('alertBox').innerHTML = '<div class="alert alert-error">رقم الواتساب يجب أن يكون 11 رقم يبدأ بـ 01</div>';
+    return;
+  }
+
+  const data = {
+    name, phone, method,
+    monthlyAmount: Number(document.getElementById('fAmount').value) || 0,
+    startDate: document.getElementById('fStartDate').value,
+    notes: document.getElementById('fNotes').value.trim()
+  };
+
+  try {
+    if (editId) {
+      await updateDoc(doc(db,'donors',editId), data);
+    } else {
+      await addDoc(collection(db,'donors'), data);
+    }
+    closeModal();
+    loadDonors();
+  } catch(e) {
+    document.getElementById('alertBox').innerHTML = `<div class="alert alert-error">خطأ: ${e.message}</div>`;
+  }
+}
+
+window.editDonor = (id) => openModal(id);
+
+window.deleteDonor = async function(id, name) {
+  if (!confirm(`هتحذف المتبرع "${name}"؟`)) return;
+  await deleteDoc(doc(db,'donors',id));
+  loadDonors();
+}
+
+// إرسال رسالة واتساب تذكير – رقم مصري يبدأ بـ 2 قبله
+window.sendReminder = function(phone, name, amount) {
+  const msg = encodeURIComponent(
+    `السلام عليكم ورحمة الله وبركاته ${name} 🌙\n\nنذكركم بتبرعكم الشهري${amount ? ' بمبلغ '+Number(amount).toLocaleString('ar-EG')+' ج.م' : ''}.\nجزاكم الله خيراً وبارك فيكم. 🤲`
+  );
+  window.open(`https://wa.me/2${phone}?text=${msg}`, '_blank');
+}
+
+// بحث
+document.getElementById('searchInput').addEventListener('input', e => {
+  const q = e.target.value.toLowerCase();
+  renderTable(donors.filter(d => d.name.toLowerCase().includes(q) || (d.phone||'').includes(q)));
+});
+
+loadDonors().catch(console.error);
+</script>
+</body>
+</html>
