@@ -137,7 +137,7 @@ function renderTable(list) {
     </tr>`).join('');
 }
 
-window.openModal = function(id=null) {
+function openModal(id=null) {
   editId = id;
   document.getElementById('alertBox').innerHTML = '';
   if (id) {
@@ -156,12 +156,12 @@ window.openModal = function(id=null) {
   document.getElementById('modalOverlay').classList.add('open');
 }
 
-window.closeModal = function() {
+function closeModal() {
   document.getElementById('modalOverlay').classList.remove('open');
   editId = null;
 }
 
-window.saveDonor = async function() {
+async function saveDonor() {
   const name  = document.getElementById('fName').value.trim();
   const phone = document.getElementById('fPhone').value.trim();
   const method = document.getElementById('fMethod').value;
@@ -197,6 +197,10 @@ window.saveDonor = async function() {
   }
 }
 
+window.openModal = openModal;
+window.closeModal = closeModal;
+window.saveDonor = saveDonor;
+
 window.editDonor = (id) => openModal(id);
 
 window.deleteDonor = async function(id, name) {
@@ -205,7 +209,6 @@ window.deleteDonor = async function(id, name) {
   loadDonors();
 }
 
-// إرسال رسالة واتساب تذكير – رقم مصري يبدأ بـ 2 قبله
 window.sendReminder = function(phone, name, amount) {
   const msg = encodeURIComponent(
     `السلام عليكم ورحمة الله وبركاته ${name} 🌙\n\nنذكركم بتبرعكم الشهري${amount ? ' بمبلغ '+Number(amount).toLocaleString('ar-EG')+' ج.م' : ''}.\nجزاكم الله خيراً وبارك فيكم. 🤲`
